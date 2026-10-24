@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>律知库</title><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="legal.css"></head>
+<body>
+  <div class="shell">
+    <aside>
+      <div class="brand"><div class="seal">律</div><div><b>律知库</b><span>私人知识检索</span></div></div>
+      <nav><button class="nav active" data-view="ask"><i>⌕</i> 知识问答</button><button class="nav" data-view="library"><i>▤</i> 文档库 <em id="docCount">0</em></button><button class="nav" data-view="settings"><i>⚙</i> 设置</button></nav>
+      <div class="privacy"><span>●</span><b>仅本地索引</b><small>文档不会上传，只有命中片段会发送给模型</small></div>
+    </aside>
+    <main>
+      <section id="ask" class="view active">
+        <header><div><p class="eyebrow">KNOWLEDGE ASSISTANT</p><h1>从你的资料中，找到准确答案。</h1></div><button class="secondary go-import">＋ 导入文档</button></header>
+        <div class="hero-card"><div class="orb">⌕</div><h2>今天想查什么？</h2><p>回答严格来自知识库，同时展示效力状态、生效日期与法条原文。</p><form id="askForm"><textarea id="question" placeholder="例如：聚众斗殴罪的法定刑是什么？" rows="3"></textarea><div class="askbar"><span id="libraryHint">知识库为空，请先导入资料</span><button id="askButton" type="submit">检索并回答 <b>↗</b></button></div></form></div>
+        <div id="answerArea" class="answer-area hidden"></div>
+        <div class="suggestions"><span>试着问问</span><button>包庇罪的构成要件是什么？</button><button>聚众斗殴罪的法定刑？</button></div>
+      </section>
+      <section id="library" class="view"><header><div><p class="eyebrow">OFFICIAL LEGAL LIBRARY</p><h1>法规文档库</h1><p>建议从国家法律法规数据库下载官方 Word 或 PDF 后导入</p></div><div class="header-actions"><button class="secondary" id="officialDbBtn">打开官方数据库 ↗</button><button class="primary" id="importBtn">＋ 导入文档</button></div></header><div class="source-banner"><span>权威来源</span><div><b>国家法律法规数据库</b><small>flk.npc.gov.cn · 全国人大常委会办公厅</small></div><i>自动识别时效性、公布日期、施行日期</i></div><div id="dropzone" class="dropzone"><div>⇧</div><b>导入从官方数据库下载的法规文件</b><span>支持 PDF、Word（.docx）、TXT 与 Markdown，解析与索引均在本机完成</span></div><div class="section-title"><b>已导入文档</b><span id="storageText"></span></div><div id="docList" class="doc-list"></div></section>
+      <section id="settings" class="view"><header><div><p class="eyebrow">PREFERENCES</p><h1>设置</h1><p>模型凭据仅保存在此设备</p></div></header><form id="settingsForm" class="settings-card"><label>API 地址<input id="baseUrl" placeholder="DeepSeek：https://api.deepseek.com"></label><label>API Key<input id="apiKey" type="password" placeholder="sk-..."></label><label>模型名称<input id="model" placeholder="deepseek-flash"></label><label>唤出快捷键<input id="shortcut" placeholder="CommandOrControl+Shift+K"><small>示例：CommandOrControl+Shift+K</small></label><label class="toggle-row"><span><b>开机自动启动</b><small>登录 Windows 后在后台运行</small></span><input id="autoLaunch" type="checkbox"><i></i></label><div class="settings-actions"><button class="secondary" id="testConnectionBtn" type="button">测试模型连接</button><button class="primary" type="submit">保存设置</button></div><div id="connectionResult" class="connection-result hidden"></div></form></section>
+    </main>
+  </div>
+  <div id="onboarding" class="modal hidden"><div class="modal-card"><div class="seal large">律</div><p class="eyebrow">WELCOME TO LEXVAULT</p><h2>配置模型服务</h2><p id="onboardingMessage">请输入 DeepSeek API Key。密钥会使用 Windows 系统凭据加密，并仅保存在本机。</p><form id="firstForm"><label>API 地址<input id="firstBaseUrl" value="https://api.deepseek.com"></label><label>API Key<input id="firstApiKey" type="password" placeholder="sk-..."></label><label>模型名称<input id="firstModel" value="deepseek-flash"></label><button class="primary" type="submit">保存并开始使用</button></form></div></div>
+  <div id="toast"></div><script src="renderer.js"></script>
+</body></html>

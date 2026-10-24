@@ -1,0 +1,82 @@
+# 律知库 LexVault
+
+本地优先的 Windows 个人法律知识库。导入从国家法律法规数据库下载的 PDF、DOCX 等文件后，律知库会在本机解析并按法条建立索引；提问时只把命中的片段发送给你配置的模型，并在回答中展示效力状态、日期、法条原文和出处。
+
+[![Tests](https://github.com/lkyyds77/lexvault/actions/workflows/test.yml/badge.svg)](https://github.com/lkyyds77/lexvault/actions/workflows/test.yml)
+[![Release](https://img.shields.io/github/v/release/lkyyds77/lexvault)](https://github.com/lkyyds77/lexvault/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+## 功能
+
+- 导入 PDF、Word（`.docx`）、TXT 和 Markdown 文档
+- 中文关键词检索与按“第×条”切分的法律文本索引
+- 回答严格基于本地知识库命中内容，不足时明确提示
+- 展示法规名称、时效性、公布日期、施行日期及失效日期
+- 展开查看命中的法条原文并打开本地源文件
+- 支持 DeepSeek 及其他兼容 OpenAI Chat Completions 的服务
+- API Key 使用 Electron `safeStorage` 在本机加密保存
+- Windows 开机启动和全局快捷键唤出，默认 `Ctrl+Shift+K`
+- 模型服务不可用时仍展示本地检索结果和法条原文
+
+## 安装
+
+从 [GitHub Releases](https://github.com/lkyyds77/lexvault/releases/latest) 下载最新版 Windows 安装程序并运行。
+
+安装包目前未使用商业代码签名证书，Windows SmartScreen 可能显示提醒。请核对 Release 页面提供的 SHA-256 后再安装。
+
+## 第一次使用
+
+1. 启动律知库，填写模型 API 信息。
+2. 使用 DeepSeek 时填写：
+   - API 地址：`https://api.deepseek.com`
+   - 模型：`deepseek-flash`
+   - API Key：从 DeepSeek 控制台取得的密钥
+3. 进入“设置”，点击“测试模型连接”。
+4. 打开[国家法律法规数据库](https://flk.npc.gov.cn/)，下载需要的 Word 或 PDF 文件。
+5. 在“法规文档库”中导入文件，然后开始提问。
+
+详细说明见[使用指南](docs/USAGE.md)。
+
+## 本地开发
+
+需要 Node.js 20 或更高版本。
+
+```powershell
+git clone https://github.com/lkyyds77/lexvault.git
+cd lexvault
+npm install
+npm test
+npm start
+```
+
+构建 Windows NSIS 安装程序：
+
+```powershell
+npm run dist
+```
+
+输出文件位于 `dist/`。
+
+## 数据与隐私
+
+- 导入的完整文档、索引和设置保存在 Electron 用户数据目录中。
+- 文档解析和检索在本机完成。
+- 提问时，只有检索命中的片段和问题会发送到所配置的模型服务。
+- API Key 不会写入源码仓库，也不会随文档上传。
+- 删除应用前如需保留知识库，请先备份 `%APPDATA%\lexvault`。
+
+## 已知限制
+
+- 扫描版 PDF 必须先经过 OCR，否则可能无法提取文字。
+- 旧版 `.doc` 请先转换为 `.docx`。
+- 官方下载文件若不包含网页上的时效字段，相应字段会显示“未标明”，程序不会自行猜测。
+- 当前检索为本地关键词相关性排序，并非向量数据库。
+- 本项目提供资料检索辅助，不构成法律意见。
+
+## 参与贡献
+
+欢迎提交 Issue 和 Pull Request。请先阅读[贡献指南](CONTRIBUTING.md)和[安全政策](SECURITY.md)。
+
+## 许可证
+
+[MIT License](LICENSE)

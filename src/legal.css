@@ -1,0 +1,24 @@
+.header-actions{display:flex;gap:9px}
+.source-banner{display:flex;gap:13px;align-items:center;background:#e5ece6;border:1px solid #cbd6cd;border-radius:11px;padding:14px 17px;margin-bottom:16px}
+.source-banner>span{background:var(--green);color:white;border-radius:4px;padding:4px 7px;font-size:11px}
+.source-banner b,.source-banner small{display:block}
+.source-banner small{color:var(--muted);margin-top:2px}
+.source-banner i{margin-left:auto;font-style:normal;color:var(--green);font-size:12px}
+.answer-area{white-space:normal}
+.answer-text{white-space:pre-wrap}
+.sources-head{display:flex;justify-content:space-between;align-items:center}
+.link-button,.open-file{border:0;background:transparent;color:var(--green);cursor:pointer}
+.source{display:block;border:0;background:#f1f3ee;width:100%;text-align:left;margin-top:9px;padding:0 14px;border-radius:8px;cursor:default}
+.source summary{display:flex;justify-content:space-between;align-items:center;padding:12px 0;cursor:pointer;font-weight:bold}
+.legal-meta{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px;border-top:1px solid #dce2dd;padding-top:10px}
+.original-label{font-size:11px;color:var(--gold);font-weight:bold;letter-spacing:1px;margin-top:12px}
+.source blockquote{white-space:pre-wrap;margin:5px 0 10px;padding:12px 14px;background:#fffdf9;border-left:2px solid var(--gold);font-family:"Microsoft YaHei",sans-serif;line-height:1.8}
+.open-file{padding:0 0 12px}
+.doc-title{display:flex;gap:9px;align-items:center}
+.status{display:inline-block;border-radius:10px;padding:1px 7px;font-size:10px;font-weight:normal;white-space:nowrap}
+.status.valid{background:#dcecdf;color:#256039}
+.status.pending{background:#fff0c9;color:#87600d}
+.status.invalid{background:#f6dddd;color:#942e2e}
+.status.unknown{background:#e6e6e1;color:#6a6d69}
+@media(max-width:850px){.source-banner i{display:none}.header-actions{flex-direction:column}}
+.settings-actions{display:flex;justify-content:flex-end;gap:10px}.connection-result{padding:10px 12px;border-radius:7px;font-size:12px}.connection-result.success{background:#dcecdf;color:#256039}.connection-result.error{background:#f6dddd;color:#942e2e}

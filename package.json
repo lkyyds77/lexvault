@@ -1,0 +1,45 @@
+{
+  "name": "lexvault",
+  "version": "0.2.1",
+  "description": "Local-first personal legal knowledge base",
+  "author": "LexVault contributors",
+  "license": "MIT",
+  "homepage": "https://github.com/lkyyds77/lexvault#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lkyyds77/lexvault.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lkyyds77/lexvault/issues"
+  },
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist": "electron-builder --win nsis"
+  },
+  "dependencies": {
+    "mammoth": "^1.9.1",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "cn.lexvault.app",
+    "productName": "律知库",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}
