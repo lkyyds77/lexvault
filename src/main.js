@@ -3,9 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const mammoth = require('mammoth');
 const pdf = require('pdf-parse');
-const { chunkDocument, extractLegalMetadata, scoreChunks } = require('./retrieval');
+const { chunkDocument, extractLegalMetadata, SearchIndex } = require('./retrieval');
 
 let win;
+let searchIndex = new SearchIndex();
 const state = { settings: null, library: null, configIssue: '' };
 const defaults = { baseUrl: 'https://api.deepseek.com', model: 'deepseek-flash', apiKey: '', shortcut: 'CommandOrControl+Shift+K', autoLaunch: true };
 const paths = () => ({ settings: path.join(app.getPath('userData'), 'settings.json'), library: path.join(app.getPath('userData'), 'library.json') });
@@ -36,6 +37,7 @@ async function loadState() {
   delete stored.apiKeyEncrypted;
   state.settings = normalizeSettings({ ...defaults, ...stored });
   state.library = readJson(p.library, { documents: [], chunks: [] });
+  searchIndex.rebuild(state.library.chunks);
   let migrated = false;
   for (const doc of state.library.documents) {
     if (!doc.sourceName) {
@@ -118,18 +120,20 @@ ipcMain.handle('pick-files', async () => {
     } catch (error) { imported.push({ name: path.basename(file), error: error.message }); }
   }
   saveJson(paths().library, state.library);
+  searchIndex.rebuild(state.library.chunks);
   return imported;
 });
 ipcMain.handle('delete-document', (_, id) => {
   state.library.documents = state.library.documents.filter((d) => d.id !== id);
   state.library.chunks = state.library.chunks.filter((c) => c.docId !== id);
+  searchIndex.rebuild(state.library.chunks);
   saveJson(paths().library, state.library); return true;
 });
 ipcMain.handle('open-document', (_, file) => shell.openPath(file));
 ipcMain.handle('open-external', (_, url) => shell.openExternal(url));
 ipcMain.handle('ask', async (_, question) => {
   if (!state.settings.apiKey) throw new Error('请先完成模型 API 配置');
-  const hits = scoreChunks(question, state.library.chunks, 7);
+  const hits = searchIndex.search(question, 7);
   if (!hits.length) return { answer: '知识库中未找到与此问题相关的内容。', sources: [] };
   const context = hits.map((h, i) => {
     const d = state.library.documents.find((doc) => doc.id === h.docId) || {};

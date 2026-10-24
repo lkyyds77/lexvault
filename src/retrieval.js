@@ -100,4 +100,91 @@ function scoreChunks(query, chunks, limit = 6) {
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-module.exports = { tokenize, chunkText, chunkDocument, extractLegalMetadata, scoreChunks };
+class SearchIndex {
+  constructor(chunks = []) {
+    this.rebuild(chunks);
+  }
+
+  rebuild(chunks = []) {
+    this.chunks = chunks;
+    this.postings = new Map();
+    this.lengths = new Uint32Array(chunks.length);
+    this.normalized = new Array(chunks.length);
+    let totalLength = 0;
+
+    for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+      const chunk = chunks[chunkIndex];
+      const source = chunk.searchText || String(chunk.text || '').toLowerCase();
+      const tokens = tokenize(source);
+      const counts = new Map();
+      for (const token of tokens) counts.set(token, (counts.get(token) || 0) + 1);
+      this.lengths[chunkIndex] = tokens.length;
+      this.normalized[chunkIndex] = source.replace(/\s/g, '');
+      totalLength += tokens.length;
+      for (const [token, frequency] of counts) {
+        let posting = this.postings.get(token);
+        if (!posting) this.postings.set(token, posting = []);
+        posting.push(chunkIndex, frequency);
+      }
+    }
+
+    for (const [token, posting] of this.postings) this.postings.set(token, Uint32Array.from(posting));
+
+    this.averageLength = chunks.length ? totalLength / chunks.length : 1;
+    this.scoreBuffer = new Float64Array(chunks.length);
+    this.markBuffer = new Uint32Array(chunks.length);
+    this.searchGeneration = 0;
+    return this;
+  }
+
+  search(query, limit = 6) {
+    if (limit <= 0) return [];
+    const queryTokens = tokenize(query);
+    if (!queryTokens.length || !this.chunks.length) return [];
+    const queryCounts = new Map();
+    for (const token of queryTokens) queryCounts.set(token, (queryCounts.get(token) || 0) + 1);
+
+    this.searchGeneration++;
+    if (this.searchGeneration === 0xffffffff) { this.markBuffer.fill(0); this.searchGeneration = 1; }
+    const generation = this.searchGeneration;
+    const touched = [];
+    const total = this.chunks.length;
+    const averageLength = this.averageLength || 1;
+    const k1 = 1.35;
+    const b = 0.68;
+    for (const [token, queryFrequency] of queryCounts) {
+      const posting = this.postings.get(token);
+      if (!posting) continue;
+      const documentFrequency = posting.length / 2;
+      const inverseDocumentFrequency = Math.log(1 + (total - documentFrequency + 0.5) / (documentFrequency + 0.5));
+      const queryWeight = (1 + Math.log(queryFrequency)) * (1 + Math.min(token.length, 4) * 0.2);
+      for (let i = 0; i < posting.length; i += 2) {
+        const chunkIndex = posting[i];
+        const termFrequency = posting[i + 1];
+        const lengthRatio = this.lengths[chunkIndex] / averageLength;
+        const termScore = inverseDocumentFrequency * ((termFrequency * (k1 + 1)) / (termFrequency + k1 * (1 - b + b * lengthRatio))) * queryWeight;
+        if (this.markBuffer[chunkIndex] !== generation) {
+          this.markBuffer[chunkIndex] = generation;
+          this.scoreBuffer[chunkIndex] = termScore;
+          touched.push(chunkIndex);
+        } else this.scoreBuffer[chunkIndex] += termScore;
+      }
+    }
+
+    if (!touched.length) return [];
+    const exact = String(query).replace(/\s/g, '').toLowerCase();
+    const top = [];
+    for (const chunkIndex of touched) {
+      let score = this.scoreBuffer[chunkIndex];
+      if (exact.length > 1 && this.normalized[chunkIndex].includes(exact)) score += 20;
+      if (top.length < limit || score > top[top.length - 1].score) {
+        top.push({ chunkIndex, score });
+        top.sort((a, b) => b.score - a.score || (this.chunks[a.chunkIndex].index ?? a.chunkIndex) - (this.chunks[b.chunkIndex].index ?? b.chunkIndex));
+        if (top.length > limit) top.pop();
+      }
+    }
+    return top.map(({ chunkIndex, score }) => ({ ...this.chunks[chunkIndex], score }));
+  }
+}
+
+module.exports = { tokenize, chunkText, chunkDocument, extractLegalMetadata, scoreChunks, SearchIndex };

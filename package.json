@@ -1,6 +1,6 @@
 {
   "name": "lexvault",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local-first personal legal knowledge base",
   "author": "LexVault contributors",
   "license": "MIT",
@@ -16,6 +16,7 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test",
+    "benchmark": "node --expose-gc scripts/benchmark.js",
     "dist": "electron-builder --win nsis"
   },
   "dependencies": {
