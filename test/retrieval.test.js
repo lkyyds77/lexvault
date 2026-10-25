@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { chunkText, chunkDocument, extractLegalMetadata, scoreChunks, SearchIndex } = require('../src/retrieval');
+const { chunkText, chunkDocument, extractLegalMetadata, scoreChunks, selectRelevantHits, extractEvidence, SearchIndex } = require('../src/retrieval');
 test('chunks long documents and preserves content', () => { const chunks = chunkText('第一段内容。\n' + '法律条文'.repeat(400), 200, 20); assert.ok(chunks.length > 1); assert.match(chunks[0], /第一段/); });
 test('ranks Chinese legal phrase', () => { const chunks = [{ text:'包庇罪是指明知是犯罪的人而为其提供隐藏处所。', searchText:'包庇罪是指明知是犯罪的人而为其提供隐藏处所。' }, { text:'这是民事合同内容。', searchText:'这是民事合同内容。' }]; const hits = scoreChunks('包庇罪的构成要件是什么', chunks); assert.equal(hits[0].text, chunks[0].text); });
 test('returns empty when no knowledge matches', () => { assert.deepEqual(scoreChunks('聚众斗殴罪', [{ text:'天气晴朗', searchText:'天气晴朗' }]), []); });
@@ -37,4 +37,15 @@ test('indexed search can rebuild after library changes', () => {
   assert.equal(index.search('聚众斗殴').length, 0);
   index.rebuild([{ index: 1, text: '聚众斗殴罪法定刑' }]);
   assert.equal(index.search('聚众斗殴')[0].index, 1);
+});
+test('keeps only strongly related top hits', () => {
+  const hits = selectRelevantHits([{ score: 10, docId: 'a', index: 1 }, { score: 6, docId: 'b', index: 1 }, { score: 2, docId: 'c', index: 1 }]);
+  assert.deepEqual(hits.map((hit) => hit.docId), ['a', 'b']);
+});
+test('extracts a concise answer passage while retaining the article heading', () => {
+  const text = `第二百九十二条 聚众斗殴的，对首要分子和其他积极参加的，处三年以下有期徒刑、拘役或者管制。\n有下列情形之一的，处三年以上十年以下有期徒刑：多次聚众斗殴。\n本条另有其他规定。${'无关内容。'.repeat(100)}`;
+  const evidence = extractEvidence('聚众斗殴罪的法定刑', text, 180);
+  assert.match(evidence, /^第二百九十二条/);
+  assert.match(evidence, /三年以下有期徒刑/);
+  assert.ok(evidence.length <= 180);
 });

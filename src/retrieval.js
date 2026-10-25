@@ -65,7 +65,7 @@ function extractLegalMetadata(text, filename = '') {
   let title = value([/(?:标题|法规名称)[：:]\s*([^\n]{2,80})/]);
   if (!title) {
     const first = source.split(/\n+/).map((s) => s.trim()).find((s) => s.length >= 4 && s.length <= 60 && !/^(目录|国家法律法规数据库|公布日期|施行日期)/.test(s));
-    title = first || filename.replace(/\.(pdf|docx|txt|md)$/i, '');
+    title = first || filename.replace(/\.(pdf|docx?|txt|md)$/i, '');
   }
   let status = value([/(?:时效性|效力状态|时效状态)[：:]\s*(尚未生效|现行有效|有效|已修改|已废止|废止|失效|部分失效)/]);
   if (status === '有效') status = '现行有效';
@@ -98,6 +98,47 @@ function scoreChunks(query, chunks, limit = 6) {
     if (exact.length > 1 && hay.replace(/\s/g, '').includes(exact)) score += 20;
     return { ...chunk, score };
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+function selectRelevantHits(hits, limit = 3, relativeThreshold = 0.32) {
+  if (!hits.length || limit <= 0) return [];
+  const threshold = hits[0].score * relativeThreshold;
+  const seen = new Set();
+  const selected = [];
+  for (const hit of hits) {
+    const key = `${hit.docId || hit.docName || ''}:${hit.index ?? ''}`;
+    if (seen.has(key) || (selected.length && hit.score < threshold)) continue;
+    seen.add(key);
+    selected.push(hit);
+    if (selected.length >= limit) break;
+  }
+  return selected;
+}
+
+function extractEvidence(query, text, maxChars = 520) {
+  const source = String(text || '').trim();
+  if (!source || maxChars <= 0) return '';
+  if (source.length <= maxChars) return source;
+  const queryTokens = [...new Set(tokenize(query))];
+  const parts = source.split(/(?<=[。！？；])/u).flatMap((part) => part.split(/\n+/)).map((part) => part.trim()).filter(Boolean);
+  if (!parts.length) return source.slice(0, maxChars).trim();
+  const scored = parts.map((part, index) => {
+    const normalized = part.toLowerCase();
+    let score = 0;
+    for (const token of queryTokens) if (normalized.includes(token)) score += 1 + Math.min(token.length, 4);
+    return { part, index, score };
+  });
+  const best = scored.filter((item) => item.score > 0).sort((a, b) => b.score - a.score || a.index - b.index).slice(0, 3);
+  if (!best.length) return source.slice(0, maxChars).trim();
+  const articleHeading = source.match(/^第[零〇一二三四五六七八九十百千万两0-9]+条(?:之[零〇一二三四五六七八九十百千万两0-9]+)?[^。；！？]*(?:[。；！？]|$)/u)?.[0] || '';
+  const ordered = best.sort((a, b) => a.index - b.index).map((item) => item.part);
+  if (articleHeading && !ordered[0]?.startsWith(articleHeading)) ordered.unshift(articleHeading);
+  let result = '';
+  for (const part of ordered) {
+    if (result && result.length + part.length + 1 > maxChars) break;
+    result += (result ? '\n' : '') + part;
+  }
+  return (result || source.slice(0, maxChars)).trim();
 }
 
 class SearchIndex {
@@ -187,4 +228,4 @@ class SearchIndex {
   }
 }
 
-module.exports = { tokenize, chunkText, chunkDocument, extractLegalMetadata, scoreChunks, SearchIndex };
+module.exports = { tokenize, chunkText, chunkDocument, extractLegalMetadata, scoreChunks, selectRelevantHits, extractEvidence, SearchIndex };
