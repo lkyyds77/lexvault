@@ -42,6 +42,14 @@ test('keeps only strongly related top hits', () => {
   const hits = selectRelevantHits([{ score: 10, docId: 'a', index: 1 }, { score: 6, docId: 'b', index: 1 }, { score: 2, docId: 'c', index: 1 }]);
   assert.deepEqual(hits.map((hit) => hit.docId), ['a', 'b']);
 });
+test('does not impose a fixed hit count when selecting relevant evidence', () => {
+  const hits = Array.from({ length: 8 }, (_, index) => ({ score: 10 - index * 0.5, docId: String(index), index }));
+  assert.equal(selectRelevantHits(hits).length, 8);
+});
+test('indexed search can return every matching chunk without a fixed limit', () => {
+  const chunks = Array.from({ length: 12 }, (_, index) => ({ index, text: `第${index + 1}条 船舶油污损害赔偿项目${index}` }));
+  assert.equal(new SearchIndex(chunks).search('船舶油污损害赔偿', Infinity).length, 12);
+});
 test('extracts a concise answer passage while retaining the article heading', () => {
   const text = `第二百九十二条 聚众斗殴的，对首要分子和其他积极参加的，处三年以下有期徒刑、拘役或者管制。\n有下列情形之一的，处三年以上十年以下有期徒刑：多次聚众斗殴。\n本条另有其他规定。${'无关内容。'.repeat(100)}`;
   const evidence = extractEvidence('聚众斗殴罪的法定刑', text, 180);

@@ -100,7 +100,7 @@ function scoreChunks(query, chunks, limit = 6) {
   }).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-function selectRelevantHits(hits, limit = 3, relativeThreshold = 0.32) {
+function selectRelevantHits(hits, limit = Infinity, relativeThreshold = 0.32) {
   if (!hits.length || limit <= 0) return [];
   const threshold = hits[0].score * relativeThreshold;
   const seen = new Set();
@@ -214,10 +214,19 @@ class SearchIndex {
 
     if (!touched.length) return [];
     const exact = String(query).replace(/\s/g, '').toLowerCase();
-    const top = [];
-    for (const chunkIndex of touched) {
+    const scored = (chunkIndex) => {
       let score = this.scoreBuffer[chunkIndex];
       if (exact.length > 1 && this.normalized[chunkIndex].includes(exact)) score += 20;
+      return { chunkIndex, score };
+    };
+    if (!Number.isFinite(limit) || limit >= touched.length) {
+      return touched.map(scored)
+        .sort((a, b) => b.score - a.score || (this.chunks[a.chunkIndex].index ?? a.chunkIndex) - (this.chunks[b.chunkIndex].index ?? b.chunkIndex))
+        .map(({ chunkIndex, score }) => ({ ...this.chunks[chunkIndex], score }));
+    }
+    const top = [];
+    for (const chunkIndex of touched) {
+      const { score } = scored(chunkIndex);
       if (top.length < limit || score > top[top.length - 1].score) {
         top.push({ chunkIndex, score });
         top.sort((a, b) => b.score - a.score || (this.chunks[a.chunkIndex].index ?? a.chunkIndex) - (this.chunks[b.chunkIndex].index ?? b.chunkIndex));

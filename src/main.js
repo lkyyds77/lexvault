@@ -143,7 +143,7 @@ ipcMain.handle('open-external', (_, url) => {
   return shell.openExternal(target.toString());
 });
 ipcMain.handle('ask', async (_, question) => {
-  const hits = selectRelevantHits(searchIndex.search(question, 10), 3, 0.32);
+  const hits = selectRelevantHits(searchIndex.search(question, Infinity), Infinity, 0.32);
   if (!hits.length) return { answer: '知识库中未找到与此问题直接相关的内容。', sources: [] };
   const sources = hits.map((h, i) => { const d = state.library.documents.find((doc) => doc.id === h.docId) || {}; return { n: i + 1, docName: h.docName, title: d.title || h.docName, index: h.index + 1, originalText: h.text, path: d.path, status: d.status || '未标明', publicationDate: d.publicationDate || '未标明', effectiveDate: d.effectiveDate || '未标明', expiryDate: d.expiryDate || '未标明', sourceName: d.sourceName || '国家法律法规数据库', sourceUrl: d.sourceUrl || 'https://flk.npc.gov.cn/' }; });
   if (state.settings.localOnly) {

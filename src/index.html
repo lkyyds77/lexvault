@@ -43,7 +43,7 @@
         <header><div><p class="eyebrow">PRIVACY & SETTINGS</p><h1>隐私与设置</h1><p>纯本地模式默认开启，不需要 API Key</p></div></header>
         <form id="settingsForm" class="settings-card">
           <label class="toggle-row privacy-toggle"><span><b>纯本地模式（推荐）</b><small>开启后代码不会调用模型 API，文档、问题和命中片段均不离开设备</small></span><input id="localOnly" type="checkbox"><i></i></label>
-          <div id="remoteNotice" class="remote-notice hidden"><b>远程模型隐私提示</b><span>关闭纯本地模式后，问题和最多 3 条精简命中片段会发送到你配置的模型服务；完整文件仍不会上传。</span></div>
+          <div id="remoteNotice" class="remote-notice hidden"><b>远程模型隐私提示</b><span>关闭纯本地模式后，问题和所有通过相关性筛选的精简命中片段会发送到你配置的模型服务；完整文件仍不会上传。命中较多时会增加 Token 消耗。</span></div>
           <div id="remoteFields" class="remote-fields">
             <label>API 地址<input id="baseUrl" placeholder="DeepSeek：https://api.deepseek.com"></label>
             <label>API Key<input id="apiKey" type="password" placeholder="sk-..."></label>
