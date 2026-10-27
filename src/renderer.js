@@ -1,5 +1,7 @@
 let appState = { settings: {}, documents: [], categories: [] };
 let selectedCategoryId = 'all';
+let collapsedCategories = new Set();
+try { collapsedCategories = new Set(JSON.parse(localStorage.getItem('lexvault-collapsed-categories') || '[]')); } catch { collapsedCategories = new Set(); }
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -39,6 +41,21 @@ function orderedCategories(parentId = null, depth = 0, seen = new Set()) {
     result.push(...orderedCategories(category.id, depth + 1, seen));
   }
   return result;
+}
+
+function visibleCategories(parentId = null, depth = 0, seen = new Set()) {
+  const result = [];
+  for (const category of appState.categories.filter((item) => (item.parentId || null) === parentId)) {
+    if (seen.has(category.id)) continue;
+    seen.add(category.id);
+    result.push({ ...category, depth });
+    if (!collapsedCategories.has(category.id)) result.push(...visibleCategories(category.id, depth + 1, seen));
+  }
+  return result;
+}
+
+function saveCollapsedCategories() {
+  localStorage.setItem('lexvault-collapsed-categories', JSON.stringify([...collapsedCategories]));
 }
 
 function descendants(categoryId) {
@@ -96,9 +113,11 @@ function renderLibrary() {
   $('#allCategoryCount').textContent = appState.documents.length;
   $('#uncategorizedCount').textContent = appState.documents.filter((document) => !document.categoryId).length;
   $('#libraryHint').textContent = appState.documents.length ? `检索 ${appState.documents.length} 份本地文档` : '知识库为空，请先导入资料';
-  $('#categoryTree').innerHTML = orderedCategories().map((category) => {
+  $('#categoryTree').innerHTML = visibleCategories().map((category) => {
     const count = categoryDocuments(category.id).length;
-    return `<button class="category-row${selectedCategoryId === category.id ? ' active' : ''}" data-category="${escapeHtml(category.id)}" style="--depth:${category.depth}"><span>${escapeHtml(category.name)}</span><em>${count}</em></button>`;
+    const hasChildren = appState.categories.some((item) => item.parentId === category.id);
+    const caret = hasChildren ? `<i class="category-caret" data-toggle-category="${escapeHtml(category.id)}" title="${collapsedCategories.has(category.id) ? '展开' : '折叠'}">${collapsedCategories.has(category.id) ? '▸' : '▾'}</i>` : '<i class="category-caret placeholder"></i>';
+    return `<button class="category-row${selectedCategoryId === category.id ? ' active' : ''}" data-category="${escapeHtml(category.id)}" style="--depth:${category.depth}"><span class="category-main">${caret}<span>${escapeHtml(category.name)}</span></span><em>${count}</em></button>`;
   }).join('');
   $$('[data-category]').forEach((button) => button.classList.toggle('active', button.dataset.category === selectedCategoryId));
 
@@ -169,6 +188,14 @@ $('#officialDbBtn').onclick = () => window.kb.openExternal('https://flk.npc.gov.
 $('#localOnly').onchange = updateRemoteSettingsState;
 
 $('.category-panel').onclick = (event) => {
+  const toggle = event.target.closest('[data-toggle-category]');
+  if (toggle) {
+    const id = toggle.dataset.toggleCategory;
+    if (collapsedCategories.has(id)) collapsedCategories.delete(id); else collapsedCategories.add(id);
+    saveCollapsedCategories();
+    renderLibrary();
+    return;
+  }
   const row = event.target.closest('[data-category]');
   if (!row) return;
   selectedCategoryId = row.dataset.category;
