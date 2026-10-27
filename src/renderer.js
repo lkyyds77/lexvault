@@ -28,6 +28,29 @@ function cleanError(error) {
   return String(error?.message || error).replace(/^Error invoking remote method '[^']+': Error:\s*/, '');
 }
 
+let categoryDialogResolve = null;
+let categoryDialogNeedsInput = true;
+function closeCategoryDialog(value = null) {
+  $('#categoryModal').classList.add('hidden');
+  const resolve = categoryDialogResolve;
+  categoryDialogResolve = null;
+  if (resolve) resolve(value);
+}
+
+function openCategoryDialog({ title, message, value = '', confirmText = '确定', needsInput = true, danger = false }) {
+  if (categoryDialogResolve) closeCategoryDialog(null);
+  categoryDialogNeedsInput = needsInput;
+  $('#categoryModalTitle').textContent = title;
+  $('#categoryModalMessage').textContent = message || '';
+  $('#categoryModalInputRow').classList.toggle('hidden', !needsInput);
+  $('#categoryModalInput').value = value;
+  $('#categoryModalConfirm').textContent = confirmText;
+  $('#categoryModalConfirm').classList.toggle('danger', danger);
+  $('#categoryModal').classList.remove('hidden');
+  if (needsInput) requestAnimationFrame(() => { $('#categoryModalInput').focus(); $('#categoryModalInput').select(); });
+  return new Promise((resolve) => { categoryDialogResolve = resolve; });
+}
+
 function statusClass(status) {
   return status === '现行有效' ? 'valid' : status === '尚未生效' ? 'pending' : /废止|失效|修改/.test(status || '') ? 'invalid' : 'unknown';
 }
@@ -187,6 +210,17 @@ $('#folderBtn').onclick = () => handleImport(window.kb.pickFolder);
 $('#officialDbBtn').onclick = () => window.kb.openExternal('https://flk.npc.gov.cn/');
 $('#localOnly').onchange = updateRemoteSettingsState;
 
+$('#categoryModalForm').onsubmit = (event) => {
+  event.preventDefault();
+  if (!categoryDialogNeedsInput) { closeCategoryDialog(true); return; }
+  const value = $('#categoryModalInput').value.trim();
+  if (!value) { toast('请输入目录名称'); $('#categoryModalInput').focus(); return; }
+  closeCategoryDialog(value);
+};
+$('#categoryModalCancel').onclick = () => closeCategoryDialog(null);
+$('#categoryModal').onclick = (event) => { if (event.target === $('#categoryModal')) closeCategoryDialog(null); };
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !$('#categoryModal').classList.contains('hidden')) closeCategoryDialog(null); });
+
 $('.category-panel').onclick = (event) => {
   const toggle = event.target.closest('[data-toggle-category]');
   if (toggle) {
@@ -205,8 +239,8 @@ $('.category-panel').onclick = (event) => {
 
 $('#addCategoryBtn').onclick = async () => {
   const parentId = $('#importCategory').value || null;
-  const name = window.prompt(parentId ? `在“${categoryPath(parentId)}”下新建子目录：` : '新建一级目录：');
-  if (!name?.trim()) return;
+  const name = await openCategoryDialog({ title: parentId ? '新建子目录' : '新建一级目录', message: parentId ? `上级目录：${categoryPath(parentId)}` : '将在目录树根级创建', confirmText: '创建' });
+  if (!name) return;
   try {
     const category = await window.kb.addCategory({ name, parentId });
     await refreshLibrary();
@@ -220,15 +254,16 @@ $('#addCategoryBtn').onclick = async () => {
 $('#renameCategoryBtn').onclick = async () => {
   if (selectedCategoryId === 'all' || selectedCategoryId === 'uncategorized') return;
   const category = appState.categories.find((item) => item.id === selectedCategoryId);
-  const name = window.prompt('重命名目录：', category?.name || '');
-  if (!name?.trim() || name.trim() === category?.name) return;
+  const name = await openCategoryDialog({ title: '重命名目录', message: `当前目录：${categoryPath(selectedCategoryId)}`, value: category?.name || '', confirmText: '保存' });
+  if (!name || name === category?.name) return;
   try { await window.kb.renameCategory(selectedCategoryId, name); await refreshLibrary(); toast('目录已重命名'); }
   catch (error) { toast(cleanError(error)); }
 };
 
 $('#deleteCategoryBtn').onclick = async () => {
   if (selectedCategoryId === 'all' || selectedCategoryId === 'uncategorized') return;
-  if (!window.confirm(`确定删除空目录“${categoryPath(selectedCategoryId)}”吗？`)) return;
+  const confirmed = await openCategoryDialog({ title: '删除目录', message: `确定删除空目录“${categoryPath(selectedCategoryId)}”吗？包含文档或子目录时将拒绝删除。`, confirmText: '删除', needsInput: false, danger: true });
+  if (!confirmed) return;
   try { await window.kb.deleteCategory(selectedCategoryId); selectedCategoryId = 'all'; await refreshLibrary(); toast('目录已删除'); }
   catch (error) { toast(cleanError(error)); }
 };
