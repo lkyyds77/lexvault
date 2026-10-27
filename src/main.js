@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { chunkDocument, extractLegalMetadata, selectRelevantHits, extractEvidence, SearchIndex } = require('./retrieval');
 const { canonicalPath, collectSupportedFiles, extractDocumentText } = require('./document-import');
+const { normalizeCategories } = require('./categories');
 
 let win;
 let searchIndex = new SearchIndex();
@@ -35,9 +36,12 @@ async function loadState() {
   }
   delete stored.apiKeyEncrypted;
   state.settings = normalizeSettings({ ...defaults, ...stored });
-  state.library = readJson(p.library, { documents: [], chunks: [] });
+  const storedLibrary = readJson(p.library, {});
+  state.library = { documents: [], chunks: [], ...storedLibrary };
+  const hadCategories = Array.isArray(state.library.categories);
+  state.library.categories = normalizeCategories(state.library.categories);
   searchIndex.rebuild(state.library.chunks);
-  let migrated = false;
+  let migrated = !hadCategories;
   for (const doc of state.library.documents) {
     if (!doc.sourceName) {
       const sample = state.library.chunks.filter((c) => c.docId === doc.id).slice(0, 15).map((c) => c.text).join('\n');
@@ -67,7 +71,7 @@ app.on('before-quit', () => { app.isQuitting = true; });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.on('window-all-closed', () => {});
 
-ipcMain.handle('bootstrap', () => ({ settings: { ...state.settings, apiKey: state.settings.apiKey ? '••••••••' : '' }, documents: state.library.documents, configIssue: state.configIssue }));
+ipcMain.handle('bootstrap', () => ({ settings: { ...state.settings, apiKey: state.settings.apiKey ? '••••••••' : '' }, documents: state.library.documents, categories: state.library.categories, configIssue: state.configIssue }));
 ipcMain.handle('save-settings', async (_, incoming) => {
   const next = normalizeSettings({ ...state.settings, ...incoming });
   if (incoming.apiKey === '••••••••') next.apiKey = state.settings.apiKey;
@@ -101,7 +105,13 @@ ipcMain.handle('test-connection', async (_, incoming) => {
   if (models.length && !models.includes(candidate.model)) throw new Error(`连接成功，但模型“${candidate.model}”不可用。可用模型：${models.join('、')}`);
   return { baseUrl: candidate.baseUrl, model: candidate.model, models };
 });
-async function importFiles(filePaths) {
+function validateCategoryId(categoryId) {
+  if (!categoryId) return null;
+  if (!state.library.categories.some((category) => category.id === categoryId)) throw new Error('选择的目录不存在，请重新选择');
+  return categoryId;
+}
+async function importFiles(filePaths, categoryId) {
+  const targetCategoryId = validateCategoryId(categoryId);
   const imported = [];
   const existing = new Set(state.library.documents.map((doc) => canonicalPath(doc.path)));
   for (const file of filePaths) {
@@ -112,7 +122,7 @@ async function importFiles(filePaths) {
       if (!text.trim()) throw new Error('未提取到文本（扫描版 PDF 需要先 OCR）');
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const metadata = extractLegalMetadata(text, path.basename(file));
-      const doc = { id, name: path.basename(file), path: file, size: fs.statSync(file).size, addedAt: new Date().toISOString(), chunks: 0, ...metadata };
+      const doc = { id, name: path.basename(file), path: file, size: fs.statSync(file).size, addedAt: new Date().toISOString(), categoryId: targetCategoryId, chunks: 0, ...metadata };
       const chunks = chunkDocument(text).map((body, index) => ({ id: `${id}-${index}`, docId: id, docName: doc.name, docTitle: doc.title, index, text: body, searchText: body.toLowerCase() }));
       doc.chunks = chunks.length;
       state.library.documents.unshift(doc); state.library.chunks.push(...chunks); imported.push(doc); existing.add(canonical);
@@ -122,13 +132,50 @@ async function importFiles(filePaths) {
   searchIndex.rebuild(state.library.chunks);
   return imported;
 }
-ipcMain.handle('pick-files', async () => {
+ipcMain.handle('pick-files', async (_, categoryId) => {
   const result = await dialog.showOpenDialog(win, { properties: ['openFile', 'multiSelections'], filters: [{ name: '支持的文档', extensions: ['pdf', 'docx', 'doc', 'txt', 'md'] }] });
-  return result.canceled ? [] : importFiles(result.filePaths);
+  return result.canceled ? [] : importFiles(result.filePaths, categoryId);
 });
-ipcMain.handle('pick-folder', async () => {
+ipcMain.handle('pick-folder', async (_, categoryId) => {
   const result = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: '选择要导入的文件夹' });
-  return result.canceled ? [] : importFiles(collectSupportedFiles(result.filePaths[0]));
+  return result.canceled ? [] : importFiles(collectSupportedFiles(result.filePaths[0]), categoryId);
+});
+ipcMain.handle('add-category', (_, incoming) => {
+  const name = String(incoming?.name || '').trim().slice(0, 40);
+  const parentId = validateCategoryId(incoming?.parentId || null);
+  if (!name) throw new Error('请输入目录名称');
+  if (state.library.categories.some((category) => category.parentId === parentId && category.name === name)) throw new Error('同级目录中已存在这个名称');
+  const category = { id: `category-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, parentId, system: false };
+  state.library.categories.push(category);
+  saveJson(paths().library, state.library);
+  return category;
+});
+ipcMain.handle('rename-category', (_, id, value) => {
+  const category = state.library.categories.find((item) => item.id === id);
+  const name = String(value || '').trim().slice(0, 40);
+  if (!category) throw new Error('目录不存在');
+  if (!name) throw new Error('请输入目录名称');
+  if (state.library.categories.some((item) => item.id !== id && item.parentId === category.parentId && item.name === name)) throw new Error('同级目录中已存在这个名称');
+  category.name = name;
+  saveJson(paths().library, state.library);
+  return true;
+});
+ipcMain.handle('delete-category', (_, id) => {
+  const category = state.library.categories.find((item) => item.id === id);
+  if (!category) throw new Error('目录不存在');
+  if (category.system) throw new Error('预置目录不能删除，可以重命名或在其下新增子目录');
+  if (state.library.categories.some((item) => item.parentId === id)) throw new Error('请先删除该目录下的子目录');
+  if (state.library.documents.some((document) => document.categoryId === id)) throw new Error('请先移动或删除该目录中的文档');
+  state.library.categories = state.library.categories.filter((item) => item.id !== id);
+  saveJson(paths().library, state.library);
+  return true;
+});
+ipcMain.handle('move-document', (_, documentId, categoryId) => {
+  const document = state.library.documents.find((item) => item.id === documentId);
+  if (!document) throw new Error('文档不存在');
+  document.categoryId = validateCategoryId(categoryId);
+  saveJson(paths().library, state.library);
+  return true;
 });
 ipcMain.handle('delete-document', (_, id) => {
   state.library.documents = state.library.documents.filter((d) => d.id !== id);

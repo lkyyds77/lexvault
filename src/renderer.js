@@ -1,4 +1,5 @@
-let appState = { settings: {}, documents: [] };
+let appState = { settings: {}, documents: [], categories: [] };
+let selectedCategoryId = 'all';
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -29,6 +30,55 @@ function statusClass(status) {
   return status === '现行有效' ? 'valid' : status === '尚未生效' ? 'pending' : /废止|失效|修改/.test(status || '') ? 'invalid' : 'unknown';
 }
 
+function orderedCategories(parentId = null, depth = 0, seen = new Set()) {
+  const result = [];
+  for (const category of appState.categories.filter((item) => (item.parentId || null) === parentId)) {
+    if (seen.has(category.id)) continue;
+    seen.add(category.id);
+    result.push({ ...category, depth });
+    result.push(...orderedCategories(category.id, depth + 1, seen));
+  }
+  return result;
+}
+
+function descendants(categoryId) {
+  const found = new Set([categoryId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const category of appState.categories) {
+      if (category.parentId && found.has(category.parentId) && !found.has(category.id)) { found.add(category.id); changed = true; }
+    }
+  }
+  return found;
+}
+
+function categoryPath(categoryId) {
+  if (!categoryId) return '未分类';
+  const byId = new Map(appState.categories.map((category) => [category.id, category]));
+  const names = [];
+  const seen = new Set();
+  let current = byId.get(categoryId);
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    names.unshift(current.name);
+    current = current.parentId ? byId.get(current.parentId) : null;
+  }
+  return names.join(' / ') || '未分类';
+}
+
+function categoryOptions(selectedId, includeUncategorized = true) {
+  const options = includeUncategorized ? `<option value=""${selectedId ? '' : ' selected'}>未分类</option>` : '';
+  return options + orderedCategories().map((category) => `<option value="${escapeHtml(category.id)}"${category.id === selectedId ? ' selected' : ''}>${'　'.repeat(category.depth)}${category.depth ? '└ ' : ''}${escapeHtml(category.name)}</option>`).join('');
+}
+
+function categoryDocuments(categoryId) {
+  if (categoryId === 'all') return appState.documents;
+  if (categoryId === 'uncategorized') return appState.documents.filter((document) => !document.categoryId);
+  const ids = descendants(categoryId);
+  return appState.documents.filter((document) => ids.has(document.categoryId));
+}
+
 function renderPrivacy() {
   const local = !!appState.settings.localOnly;
   $('#privacyTitle').textContent = local ? '纯本地模式' : '远程模型模式';
@@ -36,18 +86,37 @@ function renderPrivacy() {
   $('#modeChip').textContent = local ? '纯本地 · 不联网' : `远程精炼 · ${appState.settings.model || '模型'}`;
 }
 
-function renderDocs() {
+function renderLibrary() {
+  if (selectedCategoryId !== 'all' && selectedCategoryId !== 'uncategorized' && !appState.categories.some((category) => category.id === selectedCategoryId)) selectedCategoryId = 'all';
+  const currentImport = $('#importCategory').value;
+  $('#importCategory').innerHTML = categoryOptions(currentImport || null);
+  if (currentImport && appState.categories.some((category) => category.id === currentImport)) $('#importCategory').value = currentImport;
+
   $('#docCount').textContent = appState.documents.length;
+  $('#allCategoryCount').textContent = appState.documents.length;
+  $('#uncategorizedCount').textContent = appState.documents.filter((document) => !document.categoryId).length;
   $('#libraryHint').textContent = appState.documents.length ? `检索 ${appState.documents.length} 份本地文档` : '知识库为空，请先导入资料';
-  $('#storageText').textContent = appState.documents.length ? `${appState.documents.length} 份 · ${bytes(appState.documents.reduce((sum, document) => sum + document.size, 0))}` : '';
-  $('#docList').innerHTML = appState.documents.length ? appState.documents.map((document) => `
+  $('#categoryTree').innerHTML = orderedCategories().map((category) => {
+    const count = categoryDocuments(category.id).length;
+    return `<button class="category-row${selectedCategoryId === category.id ? ' active' : ''}" data-category="${escapeHtml(category.id)}" style="--depth:${category.depth}"><span>${escapeHtml(category.name)}</span><em>${count}</em></button>`;
+  }).join('');
+  $$('[data-category]').forEach((button) => button.classList.toggle('active', button.dataset.category === selectedCategoryId));
+
+  const documents = categoryDocuments(selectedCategoryId);
+  const title = selectedCategoryId === 'all' ? '全部文档' : selectedCategoryId === 'uncategorized' ? '未分类' : categoryPath(selectedCategoryId);
+  $('#documentListTitle').textContent = title;
+  $('#storageText').textContent = documents.length ? `${documents.length} 份 · ${bytes(documents.reduce((sum, document) => sum + document.size, 0))}` : '0 份';
+  $('#renameCategoryBtn').disabled = selectedCategoryId === 'all' || selectedCategoryId === 'uncategorized';
+  $('#deleteCategoryBtn').disabled = selectedCategoryId === 'all' || selectedCategoryId === 'uncategorized';
+  $('#docList').innerHTML = documents.length ? documents.map((document) => `
     <div class="doc">
       <div class="doc-icon">${escapeHtml(document.name.split('.').pop().toUpperCase())}</div>
       <div><div class="doc-title"><b>${escapeHtml(document.title || document.name)}</b><span class="status ${statusClass(document.status)}">${escapeHtml(document.status || '未标明')}</span></div>
+      <small class="doc-category">${escapeHtml(categoryPath(document.categoryId))}</small>
       <small>公布：${escapeHtml(document.publicationDate || '未标明')} · 施行：${escapeHtml(document.effectiveDate || '未标明')} · 失效：${escapeHtml(document.expiryDate || '未标明')}</small>
       <small>${escapeHtml(document.sourceName || '国家法律法规数据库')} · ${bytes(document.size)} · ${document.chunks} 个片段</small></div>
-      <div><button data-open="${escapeHtml(document.path)}" title="打开原文件">↗</button><button data-delete="${document.id}" title="删除">×</button></div>
-    </div>`).join('') : '<div class="empty">还没有文档。可导入单个文件，也可一次导入整个文件夹。</div>';
+      <div class="doc-actions"><select class="doc-move" data-move-document="${escapeHtml(document.id)}" title="移动到目录">${categoryOptions(document.categoryId)}</select><div><button data-open="${escapeHtml(document.path)}" title="打开原文件">↗</button><button data-delete="${escapeHtml(document.id)}" title="删除">×</button></div></div>
+    </div>`).join('') : '<div class="empty">这个目录还没有文档。请先在上方选择目标目录，然后导入文件或文件夹。</div>';
 }
 
 function updateRemoteSettingsState() {
@@ -57,16 +126,21 @@ function updateRemoteSettingsState() {
   $('#testConnectionBtn').disabled = local;
 }
 
+async function refreshLibrary() {
+  appState = await window.kb.bootstrap();
+  renderLibrary();
+}
+
 async function handleImport(picker) {
-  const items = await picker();
+  const categoryId = $('#importCategory').value || null;
+  const items = await picker(categoryId);
   if (!items.length) return;
   const good = items.filter((item) => !item.error && !item.skipped);
   const skipped = items.filter((item) => item.skipped);
   const bad = items.filter((item) => item.error);
-  appState = await window.kb.bootstrap();
-  renderDocs();
+  await refreshLibrary();
   const parts = [];
-  if (good.length) parts.push(`导入 ${good.length} 份`);
+  if (good.length) parts.push(`导入 ${good.length} 份到“${categoryPath(categoryId)}”`);
   if (skipped.length) parts.push(`跳过重复 ${skipped.length} 份`);
   if (bad.length) parts.push(`失败 ${bad.length} 份`);
   toast(parts.join('，') || '没有找到支持的文档');
@@ -78,7 +152,7 @@ function sourceMarkup(source) {
 
 async function init() {
   appState = await window.kb.bootstrap();
-  renderDocs();
+  renderLibrary();
   renderPrivacy();
   ['baseUrl', 'apiKey', 'model', 'shortcut'].forEach((key) => $('#' + key).value = appState.settings[key] || '');
   $('#autoLaunch').checked = !!appState.settings.autoLaunch;
@@ -94,11 +168,56 @@ $('#folderBtn').onclick = () => handleImport(window.kb.pickFolder);
 $('#officialDbBtn').onclick = () => window.kb.openExternal('https://flk.npc.gov.cn/');
 $('#localOnly').onchange = updateRemoteSettingsState;
 
+$('.category-panel').onclick = (event) => {
+  const row = event.target.closest('[data-category]');
+  if (!row) return;
+  selectedCategoryId = row.dataset.category;
+  if (selectedCategoryId !== 'all') $('#importCategory').value = selectedCategoryId === 'uncategorized' ? '' : selectedCategoryId;
+  renderLibrary();
+};
+
+$('#addCategoryBtn').onclick = async () => {
+  const parentId = $('#importCategory').value || null;
+  const name = window.prompt(parentId ? `在“${categoryPath(parentId)}”下新建子目录：` : '新建一级目录：');
+  if (!name?.trim()) return;
+  try {
+    const category = await window.kb.addCategory({ name, parentId });
+    await refreshLibrary();
+    $('#importCategory').value = category.id;
+    selectedCategoryId = category.id;
+    renderLibrary();
+    toast(`已创建目录“${categoryPath(category.id)}”`);
+  } catch (error) { toast(cleanError(error)); }
+};
+
+$('#renameCategoryBtn').onclick = async () => {
+  if (selectedCategoryId === 'all' || selectedCategoryId === 'uncategorized') return;
+  const category = appState.categories.find((item) => item.id === selectedCategoryId);
+  const name = window.prompt('重命名目录：', category?.name || '');
+  if (!name?.trim() || name.trim() === category?.name) return;
+  try { await window.kb.renameCategory(selectedCategoryId, name); await refreshLibrary(); toast('目录已重命名'); }
+  catch (error) { toast(cleanError(error)); }
+};
+
+$('#deleteCategoryBtn').onclick = async () => {
+  if (selectedCategoryId === 'all' || selectedCategoryId === 'uncategorized') return;
+  if (!window.confirm(`确定删除空目录“${categoryPath(selectedCategoryId)}”吗？`)) return;
+  try { await window.kb.deleteCategory(selectedCategoryId); selectedCategoryId = 'all'; await refreshLibrary(); toast('目录已删除'); }
+  catch (error) { toast(cleanError(error)); }
+};
+
 $('#docList').onclick = async (event) => {
   const open = event.target.dataset.open;
   const remove = event.target.dataset.delete;
   if (open) window.kb.openDocument(open);
-  if (remove) { await window.kb.deleteDocument(remove); appState = await window.kb.bootstrap(); renderDocs(); }
+  if (remove) { await window.kb.deleteDocument(remove); await refreshLibrary(); }
+};
+
+$('#docList').onchange = async (event) => {
+  const documentId = event.target.dataset.moveDocument;
+  if (!documentId) return;
+  try { await window.kb.moveDocument(documentId, event.target.value || null); await refreshLibrary(); toast('文档目录已更新'); }
+  catch (error) { toast(cleanError(error)); }
 };
 
 $$('.suggestions button').forEach((button) => button.onclick = () => { $('#question').value = button.textContent; $('#question').focus(); });
@@ -116,9 +235,8 @@ $('#askForm').onsubmit = async (event) => {
     const result = await window.kb.ask(question);
     const evidence = result.sources.length ? `<details class="evidence-panel"><summary>查看依据、效力信息与法条原文（${result.sources.length}）</summary><div class="sources"><div class="sources-head"><b>本地命中资料</b><button class="link-button" data-official="https://flk.npc.gov.cn/">国家法律法规数据库 ↗</button></div>${result.sources.map(sourceMarkup).join('')}</div></details>` : '';
     area.innerHTML = `<h3>${result.localOnly ? '本地检索结论' : '知识库结论'}</h3><div class="answer-text">${escapeHtml(result.answer)}</div>${evidence}`;
-  } catch (error) {
-    area.innerHTML = `<h3>无法完成回答</h3><div class="answer-text">${escapeHtml(cleanError(error))}</div>`;
-  } finally { button.disabled = false; }
+  } catch (error) { area.innerHTML = `<h3>无法完成回答</h3><div class="answer-text">${escapeHtml(cleanError(error))}</div>`; }
+  finally { button.disabled = false; }
 };
 
 $('#answerArea').onclick = (event) => {

@@ -35,8 +35,12 @@
       <section id="library" class="view">
         <header><div><p class="eyebrow">DOCUMENT LIBRARY</p><h1>文档库</h1><p>文件只在本机解析和建立索引</p></div><div class="header-actions"><button class="secondary" id="officialDbBtn">国家法律法规数据库 ↗</button><button class="secondary" id="folderBtn">导入文件夹</button><button class="primary" id="importBtn">导入文件</button></div></header>
         <div class="source-banner"><span>本地</span><div><b>完整文件不上传</b><small>支持递归导入文件夹，自动跳过重复文件</small></div><i>PDF · DOCX · DOC · TXT · MD</i></div>
-        <div id="dropzone" class="dropzone"><div>＋</div><b>选择一个或多个文档</b><span>支持 PDF、Word（.docx / .doc）、TXT 与 Markdown；扫描版 PDF 需先 OCR</span></div>
-        <div class="section-title"><b>已导入文档</b><span id="storageText"></span></div><div id="docList" class="doc-list"></div>
+        <div class="import-target"><label><span>导入到目录</span><select id="importCategory"></select></label><button class="secondary" id="addCategoryBtn">＋ 新建子目录</button><small>先选择目标目录，再导入文件或文件夹</small></div>
+        <div id="dropzone" class="dropzone"><div>＋</div><b>选择一个或多个文档</b><span>文档将导入上方所选目录；扫描版 PDF 需先 OCR</span></div>
+        <div class="library-browser">
+          <div class="category-panel"><div class="category-title"><b>目录</b><div><button id="renameCategoryBtn" title="重命名当前目录">✎</button><button id="deleteCategoryBtn" title="删除当前目录">×</button></div></div><button class="category-row active" data-category="all"><span>全部文档</span><em id="allCategoryCount">0</em></button><button class="category-row" data-category="uncategorized"><span>未分类</span><em id="uncategorizedCount">0</em></button><div id="categoryTree"></div></div>
+          <div class="document-panel"><div class="section-title"><b id="documentListTitle">全部文档</b><span id="storageText"></span></div><div id="docList" class="doc-list"></div></div>
+        </div>
       </section>
 
       <section id="settings" class="view">
